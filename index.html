@@ -29,7 +29,7 @@
                        linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
       background-size:32px 32px;pointer-events:none;z-index:0}
 
-    #root{position:relative;z-index:1;max-width:430px;margin:0 auto;min-height:100vh;padding-bottom:80px}
+    #root{position:relative;z-index:1;max-width:430px;margin:0 auto;min-height:100vh;padding-bottom:100px}
 
     /* screens */
     .screen{display:none}
@@ -37,7 +37,7 @@
     @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 
     /* loading */
-    #screen-loading{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px}
+    #screen-loading{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;position:fixed;inset:0;z-index:9999;background:var(--bg)}
     #screen-loading.active{display:flex}
     .loader-ring{width:48px;height:48px;border:3px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
@@ -58,7 +58,7 @@
     .login-feat-text strong{color:var(--text);display:block;font-size:13px;margin-bottom:2px}
 
     /* bottom nav */
-    .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:100;padding:8px 0 12px}
+    .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:100;padding:10px 0 16px;box-shadow:0 -4px 20px rgba(0,0,0,.5)}
     .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;color:var(--muted);font-family:var(--font);font-size:10px;font-weight:600;cursor:pointer;padding:4px;transition:color .2s}
     .nav-btn.active{color:var(--green)}
     .nav-btn .nav-icon{font-size:20px;line-height:1}
@@ -1692,34 +1692,33 @@ window.adminGiveCoins=async()=>{
   const input=document.getElementById('admin-coin-uid').value.trim();
   const amount=parseInt(document.getElementById('admin-coin-amount').value.trim());
   if(!input){ toast('❌ Enter UID or email','e'); return; }
-  if(isNaN(amount)){ toast('❌ Enter valid amount','e'); return; }
+  if(isNaN(amount)||amount===0){ toast('❌ Enter valid amount (not 0)','e'); return; }
+  
+  const btn=document.querySelector('#admin-sec-coins .btn-purple');
+  if(btn){ btn.disabled=true; btn.textContent='Processing…'; }
+  
   try{
-    /* find user by UID directly */
-    const snap=await get(ref(db,'users/'+input));
-    if(snap.exists()){
-      const currentCoins=snap.val().coins||0;
-      const newCoins=Math.max(0,currentCoins+amount);
-      await set(ref(db,'users/'+input+'/coins'),newCoins);
-      toast((amount>0?'✅ +'+amount:' '+amount)+' coins updated!','s');
-      document.getElementById('admin-coin-uid').value='';
-      document.getElementById('admin-coin-amount').value='';
-    } else {
-      /* search by email */
-      const allSnap=await get(ref(db,'users'));
-      let found=false;
-      if(allSnap.exists()){
-        for(const [key,val] of Object.entries(allSnap.val())){
-          if(val.email===input){
-            const newCoins=Math.max(0,(val.coins||0)+amount);
-            await set(ref(db,'users/'+key+'/coins'),newCoins);
-            toast((amount>0?'✅ +'+amount:''+amount)+' coins for '+val.name,'s');
-            found=true; break;
-          }
-        }
+    const allSnap=await get(ref(db,'users'));
+    if(!allSnap.exists()){ toast('❌ No users found','e'); return; }
+    
+    let found=false;
+    for(const [key,val] of Object.entries(allSnap.val())){
+      /* match by UID, email, or name */
+      if(key===input || val.email===input || val.name===input){
+        const currentCoins=val.coins||0;
+        const newCoins=Math.max(0,currentCoins+amount);
+        await set(ref(db,'users/'+key+'/coins'),newCoins);
+        toast((amount>0?'✅ +'+amount:'✅ '+amount)+' coins → '+val.name+' ('+newCoins+' total)','s');
+        document.getElementById('admin-coin-uid').value='';
+        document.getElementById('admin-coin-amount').value='';
+        found=true;
+        await loadAdminStats();
+        break;
       }
-      if(!found) toast('❌ User not found','e');
     }
+    if(!found) toast('❌ User not found — try full UID or email','e');
   }catch(e){ toast('❌ '+e.message,'e'); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='💰 Update Coins'; } }
 };
 
 window.adminBroadcast=async()=>{
